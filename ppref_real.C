@@ -46,10 +46,10 @@ void ppref_real()
       //dsigmadpt_real_5p02[i]=dsigmadpt_real[i]*dsigmadpt_FONLL_5p02[i]/dsigmadpt_FONLL[i];
     }
   
-  TH1F* d_r = new TH1F("d_r","",nBins,ptBins[0],ptBins[nBins]);
-  TH1F* d_f = new TH1F("d_f","",nBins,ptBins[0],ptBins[nBins]);
-  TH1F* d_f5 = new TH1F("d_f5","",nBins,ptBins[0],ptBins[nBins]);
-  TH1F* pythia_ref = new TH1F("pythia_ref","",nBins,ptBins[0],ptBins[nBins]);
+  TH1F* d_r = new TH1F("d_r","",nBins,ptBins);
+  TH1F* d_f = new TH1F("d_f","",nBins,ptBins);
+  TH1F* d_f5 = new TH1F("d_f5","",nBins,ptBins);
+  TH1F* pythia_ref = new TH1F("pythia_ref","",nBins,ptBins);
 
   for(i=0;i<nBins;i++)
     {
@@ -64,6 +64,11 @@ void ppref_real()
       pythia_ref->SetBinError(i+1,e_pythia[i]);
     }
   
+  d_r->Sumw2();
+  d_f->Sumw2();
+  d_f5->Sumw2();
+  pythia_ref->Sumw2();
+  
   TH1F* real_ref = (TH1F*) d_r->Clone("real_ref");
   real_ref->Sumw2();
   real_ref->Multiply(d_f5);
@@ -74,33 +79,42 @@ void ppref_real()
   real_ref->GetYaxis()->SetTitle("Normalized Distribution");
   real_ref->GetYaxis()->SetTitleOffset(1.0);
   
-  float norm;
-  norm = real_ref->Integral();
-  real_ref->Scale(1.0/norm);
-  norm = pythia_ref->Integral();
-  pythia_ref->Scale(1.0/norm);
+  real_ref->Scale(1.0/real_ref->Integral("width"));
+  pythia_ref->Scale(1.0/pythia_ref->Integral("width"));
+  d_f5->Scale(1.0/d_f5->Integral("width"));
+  //float norm;
+  //norm = real_ref->Integral("width");
+  //real_ref->Scale(1.0/norm);
+  //norm = pythia_ref->Integral("width");
+  //pythia_ref->Scale(1.0/norm);
+  //norm = d_f5->Integral("width");
+  //d_f5->Scale(1.0/norm);
 
   TFile* inputMC = new TFile(inputmcname.Data());
   TTree* Gen = (TTree*) inputMC->Get("Bfinder/ntGen");
-  TH1F* Genpt = new TH1F("Genpt","",nBins,ptBins[0],ptBins[nBins]);
-  Gen->Project("Genpt","Gpt","(GisSignal==1)&&(GcollisionId==0)&&((Gpt>5&&Gpt<10&&TMath::Abs(Gy)<2.4)||(Gpt>10&&Gpt<17&&TMath::Abs(Gy)<1.45)||(Gpt>17&&Gpt<100&&TMath::Abs(Gy)<2.1))");
-  
-  norm = Genpt->Integral();
-  Genpt->Scale(1.0/norm);
+  Gen->AddFriend("hiEvtAnalyzer/HiTree");
+  TString weightgen = "pthatweight";
+  TString Bselection = "(GisSignal==1)&&(GcollisionId==0)&&((Gpt>5&&Gpt<10&&TMath::Abs(Gy)<2.4)||(Gpt>10&&Gpt<17&&TMath::Abs(Gy)<1.45)||(Gpt>17&&Gpt<100&&TMath::Abs(Gy)<2.1))";
+  TH1F* Genpt = new TH1F("Genpt","",nBins,ptBins);
+  Gen->Project("Genpt","Gpt",TCut(weightgen)*TCut(Bselection));
+  Genpt->Scale(1.0/Genpt->Integral(),"width");
+  //divideBinWidth(Genpt);
+  //norm = Genpt->Integral();
+  //Genpt->Scale(1.0/norm,"width");
   
   TH1F* Ratiopt = (TH1F*) real_ref->Clone("Ratiopt");
   Ratiopt->Sumw2();
   Ratiopt->Divide(Genpt);
   
   TF1 *f = new TF1("f","[0]+[1]*x+[2]*x*x+[3]*x*x*x",5,100);
-  f->SetParameters(1,0.1,0.1);
+  f->SetParameters(1,0.1,0.1,0.1);
   f->SetParLimits(0,0,10);
   f->SetParLimits(1,-10,10);
   f->SetParLimits(2,-10,10);
   f->SetParLimits(3,-10,10);
-
+  
   Ratiopt->Fit("f");
-
+  
   printf("Bpt weight function: %f+%f*Bpt+%f*Bpt*Bpt+%f*Bpt*Bpt*Bpt\n",f->GetParameter(0),f->GetParameter(1),f->GetParameter(2),f->GetParameter(3));
   
   Ratiopt->SetTitle("Ratio between Real data and Genpt");
@@ -113,11 +127,13 @@ void ppref_real()
   real_ref->SetLineColor(kRed);
   pythia_ref->SetLineColor(kGreen);
   Genpt->SetLineColor(kBlue);
+  d_f5->SetLineColor(kMagenta);
   real_ref->Draw();
   pythia_ref->Draw("same");
   Genpt->Draw("same");
+  d_f5->Draw("same");
 
-  TLegend *leg = new TLegend(0.45,0.75,0.75,0.90,NULL,"brNDC");
+  TLegend *leg = new TLegend(0.50,0.60,0.80,0.75,NULL,"brNDC");
   leg->SetBorderSize(0);
   leg->SetTextSize(0.03);
   leg->SetTextFont(42);
@@ -125,8 +141,10 @@ void ppref_real()
   leg->AddEntry(real_ref,"real_reference","l");
   leg->AddEntry(pythia_ref,"pythia_reference","l");
   leg->AddEntry(Genpt,"Genpt_MC","l");
+  leg->AddEntry(d_f5,"FONLL_5.02TeV","l");
   leg->Draw("same");
 
+  //c1->RedrawAxis();
   c1->SetLogy();
   c1->SaveAs("Bpt_comparison.png");
 
