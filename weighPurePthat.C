@@ -19,7 +19,7 @@ int weighPurePthat(TString ifname, TString ofname)
   TFile* inf = TFile::Open(ifname);
   TTree* HiTree = (TTree*)inf->Get("hiEvtAnalyzer/HiTree");
   float pthat; HiTree->SetBranchAddress("pthat",&pthat);
-  int pthatcut; HiTree->SetBranchAddress("pthatcut",&pthatcut);
+  int pthatcut;
 
   float weight[nBins],nweight[nBins];
   for(int j=0;j<nBins;j++)
@@ -56,13 +56,15 @@ int weighPurePthat(TString ifname, TString ofname)
   TTree* HiTree_new = (TTree*)outf->Get("hiEvtAnalyzer/HiTree");
   float pthatweight;
   TBranch* newBr_pthatweight = HiTree_new->Branch("pthatweight", &pthatweight, "pthatweight/F");
+  HiTree_new->SetBranchAddress("pthat",&pthat);
+  HiTree_new->SetBranchAddress("pthatcut",&pthatcut);
   std::cout<<" -- Filling weight branch"<<std::endl;
   for(int i=0;i<nentries;i++)
     {
-      HiTree->GetEntry(i);
+      HiTree_new->GetEntry(i);
       if(i%100==0) std::cout<<std::left<<" Processing [ "<<std::setw(10)<<i<<" / "<<nentries<<" ] - "<<std::setw(6)<<(int)(100.*i/nentries)<<"% \r"<<std::flush;
-      pthatweight=0;
-      if(pthat<pthatcut) continue;
+      //pthatweight=0;
+      //if(pthat<pthatcut) continue;
       for(int j=0;j<nBins;j++)
         {	  
           if(isInsidebin(pthat,j))
@@ -70,11 +72,12 @@ int weighPurePthat(TString ifname, TString ofname)
               pthatweight = weight[j];
             }
         }
+      if(pthat<pthatcut) pthatweight = 0;
       newBr_pthatweight->Fill();
     }
   outf->cd("hiEvtAnalyzer");
   HiTree_new->Write("", TObject::kOverwrite);
-
+  
   std::cout<<std::endl<<" -- End"<<std::endl<<std::endl;
 
   return 0;
